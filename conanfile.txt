@@ -1,0 +1,8 @@
+[requires]
+argparse/2.6
+spdlog/1.10.0
+stb/cci.20210910
+
+[generators]
+CMakeDeps
+CMakeToolchain
