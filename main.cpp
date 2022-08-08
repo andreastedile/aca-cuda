@@ -5,7 +5,9 @@
 #include <stb_image.h>
 
 int main(int argc, char *argv[]) {
-    argparse::ArgumentParser app("Barnes–Hut simulation");
+    argparse::ArgumentParser app("jqc");
+    app.add_description("A JPEG compressor based on the quadtree algorithm");
+
     app.add_argument("input")
             .required()
             .help("specify the input file");
