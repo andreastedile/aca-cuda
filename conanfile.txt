@@ -4,5 +4,5 @@ spdlog/1.10.0
 stb/cci.20210910
 
 [generators]
-CMakeDeps
-CMakeToolchain
+cmake_find_package
+cmake_paths

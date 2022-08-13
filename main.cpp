@@ -1,8 +1,9 @@
 #include <argparse/argparse.hpp>
 #include <iostream>
-#include <stdexcept>
 #include <spdlog/spdlog.h>
 #include <stb_image.h>
+#include <stb_image_write.h>
+#include <stdexcept>
 
 int main(int argc, char *argv[]) {
     argparse::ArgumentParser app("jqc");
@@ -46,12 +47,17 @@ int main(int argc, char *argv[]) {
     spdlog::info("Reading {}...", input);
 
     int n_cols, n_rows, n;
-    uint8_t* data = stbi_load(input.c_str(), &n_cols, &n_rows, &n, 3);
-    if (!data) {
+    uint8_t *pixels = stbi_load(input.c_str(), &n_cols, &n_rows, &n, 3);
+    if (!pixels) {
         throw std::runtime_error("Could not open file " + input);
     }
 
     spdlog::info("Image is {}x{} px", n_rows, n_cols);
 
-    stbi_image_free(data);
+    spdlog::info("Writing output file...", input);
+    stbi_write_jpg("result.jpg", n_cols, n_rows, 3, pixels, 100);
+
+    stbi_image_free(pixels);
+
+    spdlog::info("Done.");
 }
