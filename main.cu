@@ -1,6 +1,8 @@
 #include "flatten.h"
+#include "gpu_types.h"
 
 #include <argparse/argparse.hpp>
+#include <cuda_runtime.h>
 #include <iostream>
 #include <spdlog/spdlog.h>
 #include <stb_image.h>
@@ -58,6 +60,25 @@ int main(int argc, char *argv[]) {
 
     spdlog::info("Flattening image...");
     auto color_soa = flatten(pixels, n_rows * n_cols);
+
+    U8ArraySoa device_soa;
+
+    cudaMalloc(&device_soa.r, n_rows * n_cols);
+    cudaMalloc(&device_soa.g, n_rows * n_cols);
+    cudaMalloc(&device_soa.b, n_rows * n_cols);
+
+    cudaMemcpy(device_soa.r, color_soa.r.data(), n_rows * n_cols, cudaMemcpyHostToDevice);
+    cudaMemcpy(device_soa.g, color_soa.g.data(), n_rows * n_cols, cudaMemcpyHostToDevice);
+    cudaMemcpy(device_soa.b, color_soa.b.data(), n_rows * n_cols, cudaMemcpyHostToDevice);
+
+
+    cudaMemcpy(color_soa.r.data(), device_soa.r, n_rows * n_cols, cudaMemcpyDeviceToHost);
+    cudaMemcpy(color_soa.g.data(), device_soa.g, n_rows * n_cols, cudaMemcpyDeviceToHost);
+    cudaMemcpy(color_soa.b.data(), device_soa.b, n_rows * n_cols, cudaMemcpyDeviceToHost);
+    
+    cudaFree(device_soa.r);
+    cudaFree(device_soa.g);
+    cudaFree(device_soa.b);
 
     spdlog::info("Writing output file...", input);
     stbi_write_jpg("result.jpg", n_cols, n_rows, 3, pixels, 100);

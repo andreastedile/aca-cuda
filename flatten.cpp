@@ -4,7 +4,7 @@
 #include <cstdint>
 
 void flatten_data_impl(const uint8_t *pixels,
-                       ColorSoa &soa,
+                       U8VectorSoa &soa,
                        int i, int j,
                        int n_rows, int n_cols,
                        int idx,
@@ -26,8 +26,8 @@ void flatten_data_impl(const uint8_t *pixels,
     }
 }
 
-ColorSoa flatten(const uint8_t *pixels, int n_pixels) {
-    auto soa = ColorSoa{ColorArray(n_pixels), ColorArray(n_pixels), ColorArray(n_pixels)};
+U8VectorSoa flatten(const uint8_t *pixels, int n_pixels) {
+    auto soa = U8VectorSoa{U8Vector(n_pixels), U8Vector(n_pixels), U8Vector(n_pixels)};
     // Fixme: fix the order of the parameters in the function call
     flatten_data_impl(pixels, soa, 0, 0,
                       static_cast<int>(std::sqrt(n_pixels)),

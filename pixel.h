@@ -3,6 +3,8 @@
 
 #include "rgb.h"
 
-using Pixel = RGB<color_t>;
+#include <cstdint>
+
+using Pixel = RGB<uint8_t>;
 
 #endif//ACA_CUDA_PIXEL_H
