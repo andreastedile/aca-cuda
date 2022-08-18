@@ -10,7 +10,11 @@ find_package(argparse REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(stb REQUIRED)
 
-add_executable(app main.cpp)
+add_executable(app main.cpp
+        pixel.h
+        soa.h
+        flatten.cpp flatten.cpp
+        node.h )
 
 set_target_properties(app PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 

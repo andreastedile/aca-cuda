@@ -1,3 +1,5 @@
+#include "flatten.h"
+
 #include <argparse/argparse.hpp>
 #include <iostream>
 #include <spdlog/spdlog.h>
@@ -53,6 +55,9 @@ int main(int argc, char *argv[]) {
     }
 
     spdlog::info("Image is {}x{} px", n_rows, n_cols);
+
+    spdlog::info("Flattening image...");
+    auto color_soa = flatten(pixels, n_rows * n_cols);
 
     spdlog::info("Writing output file...", input);
     stbi_write_jpg("result.jpg", n_cols, n_rows, 3, pixels, 100);
