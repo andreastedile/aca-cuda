@@ -15,7 +15,6 @@ add_executable(app main.cu
         gpu_types.h
         pixel.h
         rgb.h
-        soa.h
         flatten.cpp flatten.cpp
         node.h )
 
