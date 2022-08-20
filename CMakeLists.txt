@@ -21,6 +21,9 @@ add_executable(app main.cu
 
 set_target_properties(app PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
+# https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
+set_target_properties(app PROPERTIES CUDA_ARCHITECTURES "60")
+
 target_compile_definitions(app PUBLIC STB_IMAGE_IMPLEMENTATION)
 target_compile_definitions(app PUBLIC STB_IMAGE_WRITE_IMPLEMENTATION)
 
