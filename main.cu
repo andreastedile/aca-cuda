@@ -200,8 +200,8 @@ int main(int argc, char *argv[]) {
     Node *quadtree_nodes = NULL;
     cudaMalloc(&quadtree_nodes, n_nodes * sizeof(Node));
 
-    dim3 block(1024);
-    dim3 grid((n_pixels + block.x - 1) / block.x);
+    dim3 block(16); // number of threads per block
+    dim3 grid(n_pixels / block.x); // number of blocks
     build_quadtree<<<grid, block>>>(device_soa, quadtree_nodes, tree_height, n_rows, n_cols);
     cudaDeviceSynchronize();
 
