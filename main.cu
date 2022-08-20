@@ -157,6 +157,12 @@ int main(int argc, char *argv[]) {
     // %v The actual text to log
     spdlog::set_pattern("[elapsed: %o ms] [%^%l%$] %v");
 
+#ifdef NDEBUG
+    spdlog::warn("jqc compiled in RELEASE mode");
+#else
+    spdlog::warn("jqc compiled in DEBUG mode");
+#endif
+
     spdlog::info("Reading {}...", input);
 
     int n_cols, n_rows, n;
@@ -193,7 +199,7 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(device_soa.g, color_soa.g.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice);
     cudaMemcpy(device_soa.b, color_soa.b.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice);
 
-    spdlog::info("Init quadtree leaves...");
+    spdlog::info("Building quadtree leaves...");
 
     int tree_height = log4(n_pixels);
     int n_nodes = static_cast<int>(std::pow(4, tree_height + 1) / 3);
