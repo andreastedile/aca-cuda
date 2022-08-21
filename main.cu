@@ -16,8 +16,83 @@ __device__ __host__ int log4(int n) {
     return static_cast<int>(log(n) / log(4));
 }
 
-__device__ Node make_internal_node(Node &nw, Node &ne, Node &se, Node &sw) {
-    return Node(0, 0, 0, 0, 0, 0, {}, {}, {}, false);
+__device__ bool should_merge(double detail_threshold, const RGB<double> &std) {
+    return std.r <= detail_threshold ||
+           std.g <= detail_threshold ||
+           std.b <= detail_threshold;
+}
+
+// source
+// https://stats.stackexchange.com/questions/25848/how-to-sum-a-standard-deviation/442050#442050
+__device__ RGB<double> combine_means(const Node &nw, const Node &ne, const Node &se, const Node &sw) {
+    int pixels = nw.n_rows * nw.n_cols + ne.n_rows * ne.n_cols + se.n_rows * se.n_cols + sw.n_rows * sw.n_cols;
+    auto nw_mean = nw.m_mean,
+         ne_mean = ne.m_mean,
+         se_mean = se.m_mean,
+         sw_mean = sw.m_mean;
+    auto nw_pixels = nw.n_rows * nw.n_cols,
+         ne_pixels = ne.n_rows * ne.n_cols,
+         se_pixels = se.n_rows * se.n_cols,
+         sw_pixels = sw.n_rows * nw.n_cols;
+    return {
+            (nw_mean.r * nw_pixels + ne_mean.r * ne_pixels + se_mean.r * se_pixels + sw_mean.r * sw_pixels) / pixels,
+            (nw_mean.g * nw_pixels + ne_mean.g * ne_pixels + se_mean.g * se_pixels + sw_mean.g * sw_pixels) / pixels,
+            (nw_mean.b * nw_pixels + ne_mean.b * ne_pixels + se_mean.b * se_pixels + sw_mean.b * sw_pixels) / pixels,
+    };
+}
+
+__device__ RGB<double> combine_stds(const Node &nw, const Node &ne, const Node &se, const Node &sw, const RGB<double> &mean) {
+    int pixels = nw.n_rows * nw.n_cols + ne.n_rows * ne.n_cols + se.n_rows * se.n_cols + sw.n_rows * sw.n_cols;
+    auto nw_mean = nw.m_mean,
+         ne_mean = ne.m_mean,
+         se_mean = se.m_mean,
+         sw_mean = sw.m_mean;
+    auto nw_std = nw.m_std,
+         ne_std = ne.m_std,
+         se_std = se.m_std,
+         sw_std = sw.m_std;
+    auto nw_pixels = nw.n_rows * nw.n_cols,
+         ne_pixels = ne.n_rows * ne.n_cols,
+         se_pixels = se.n_rows * se.n_cols,
+         sw_pixels = sw.n_rows * nw.n_cols;
+
+    return {
+            std::sqrt(
+                    (std::pow(nw_std.r, 2) * nw_pixels + nw_pixels * std::pow(mean.r - nw_mean.r, 2) +
+                     std::pow(ne_std.r, 2) * ne_pixels + ne_pixels * std::pow(mean.r - ne_mean.r, 2) +
+                     std::pow(se_std.r, 2) * se_pixels + se_pixels * std::pow(mean.r - se_mean.r, 2) +
+                     std::pow(sw_std.r, 2) * sw_pixels + sw_pixels * std::pow(mean.r - sw_mean.r, 2)) /
+                    pixels),
+
+            std::sqrt(
+                    (std::pow(nw_std.g, 2) * nw_pixels + nw_pixels * std::pow(mean.g - nw_mean.g, 2) +
+                     std::pow(ne_std.g, 2) * ne_pixels + ne_pixels * std::pow(mean.g - ne_mean.g, 2) +
+                     std::pow(se_std.g, 2) * se_pixels + se_pixels * std::pow(mean.g - se_mean.g, 2) +
+                     std::pow(sw_std.g, 2) * sw_pixels + sw_pixels * std::pow(mean.g - sw_mean.g, 2)) /
+                    pixels),
+
+            std::sqrt(
+                    (std::pow(nw_std.b, 2) * nw_pixels + nw_pixels * std::pow(mean.b - nw_mean.b, 2) +
+                     std::pow(ne_std.b, 2) * ne_pixels + ne_pixels * std::pow(mean.b - ne_mean.b, 2) +
+                     std::pow(se_std.b, 2) * se_pixels + se_pixels * std::pow(mean.b - se_mean.b, 2) +
+                     std::pow(sw_std.b, 2) * sw_pixels + sw_pixels * std::pow(mean.b - sw_mean.b, 2)) /
+                    pixels),
+    };
+}
+
+__device__ Node make_internal_node(Node &nw, Node &ne, Node &se, Node &sw, int detail_threshold) {
+    int height = nw.height + 1;
+    int depth = nw.depth - 1;
+    int i = nw.i;
+    int j = nw.j;
+    int n_rows = nw.n_rows + sw.n_rows;
+    int n_cols = nw.n_cols + ne.n_cols;
+    auto mean = combine_means(nw, ne, se, sw);
+    auto std = combine_stds(nw, ne, se, sw, mean);
+    auto color = Pixel{static_cast<uint8_t>(mean.r), static_cast<uint8_t>(mean.g), static_cast<uint8_t>(mean.b)};
+    bool is_leaf = should_merge(detail_threshold, std);
+
+    return {height, depth, i, j, n_rows, n_cols, color, mean, std, is_leaf};
 }
 
 
@@ -53,19 +128,19 @@ __device__ void init_quadtree_leaves(U8ArraySoa soa, Node *quadtree_nodes, int t
  * @param n_rows
  * @param n_cols
  */
-__global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, int n_rows, int n_cols) {
+__global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, int n_rows, int n_cols, int detail_threshold) {
 #ifndef NDEBUG
-	if (threadIdx.x == 0 && blockIdx.x == 0){
-	    printf("Build quadtree called. Block id: %d, thread id: %d\n", blockIdx.x, threadIdx.x);
-	}
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        printf("Build quadtree called. Block id: %d, thread id: %d\n", blockIdx.x, threadIdx.x);
+    }
 #endif
 
     init_quadtree_leaves(soa, g_nodes, tree_height, n_rows, n_cols);
     __syncthreads();
 #ifndef NDEBUG
-	if (threadIdx.x == 0 && blockIdx.x == 0){
-		printf("Leaves have been init\n");
-	}
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        printf("Leaves have been init\n");
+    }
 #endif
 
 
@@ -79,9 +154,9 @@ __global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, i
     // this happens when depth reaches the following value:
     const int min_depth = tree_height - log4(blockDim.x);
 #ifndef NDEBUG
-	if (threadIdx.x == 0 && blockIdx.x == 0){
-		printf("min depth: %d\n", min_depth);
-	}
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        printf("min depth: %d\n", min_depth);
+    }
 #endif
 
     for (int depth = tree_height - 1,// We have already init the leaves of the tree, so we start at the level above
@@ -126,7 +201,8 @@ __global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, i
                     read_position[0],
                     read_position[1],
                     read_position[2],
-                    read_position[3]);
+                    read_position[3],
+                    detail_threshold);
         }
         __syncthreads();
     }
@@ -224,9 +300,9 @@ int main(int argc, char *argv[]) {
     Node *quadtree_nodes = NULL;
     cudaMalloc(&quadtree_nodes, n_nodes * sizeof(Node));
 
-    dim3 block(16); // number of threads per block
-    dim3 grid(n_pixels / block.x); // number of blocks
-    build_quadtree<<<grid, block>>>(device_soa, quadtree_nodes, tree_height, n_rows, n_cols);
+    dim3 block(16);               // number of threads per block
+    dim3 grid(n_pixels / block.x);// number of blocks
+    build_quadtree<<<grid, block>>>(device_soa, quadtree_nodes, tree_height, n_rows, n_cols, detail_threshold);
     cudaDeviceSynchronize();
 
     spdlog::info("Copying pixels back to host...");
