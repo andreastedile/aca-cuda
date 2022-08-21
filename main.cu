@@ -12,11 +12,16 @@
 #include <stb_image_write.h>
 #include <stdexcept>
 
+/**
+ * Compute base 4 integer logarithm of n
+ * @param n
+ * @return
+ */
 __device__ __host__ int log4(int n) {
-    return static_cast<int>(log(n) / log(4));
+    return static_cast<int>(std::log2(n) / 2);
 }
 
-__device__ bool should_merge(double detail_threshold, const RGB<double> &std) {
+__device__ __host__ bool should_merge(double detail_threshold, const RGB<double> &std) {
     return std.r <= detail_threshold ||
            std.g <= detail_threshold ||
            std.b <= detail_threshold;
@@ -24,7 +29,7 @@ __device__ bool should_merge(double detail_threshold, const RGB<double> &std) {
 
 // source
 // https://stats.stackexchange.com/questions/25848/how-to-sum-a-standard-deviation/442050#442050
-__device__ RGB<double> combine_means(const Node &nw, const Node &ne, const Node &se, const Node &sw) {
+__device__ __host__ RGB<double> combine_means(const Node &nw, const Node &ne, const Node &se, const Node &sw) {
     int pixels = nw.n_rows * nw.n_cols + ne.n_rows * ne.n_cols + se.n_rows * se.n_cols + sw.n_rows * sw.n_cols;
     auto nw_mean = nw.m_mean,
          ne_mean = ne.m_mean,
@@ -41,7 +46,7 @@ __device__ RGB<double> combine_means(const Node &nw, const Node &ne, const Node 
     };
 }
 
-__device__ RGB<double> combine_stds(const Node &nw, const Node &ne, const Node &se, const Node &sw, const RGB<double> &mean) {
+__device__ __host__ RGB<double> combine_stds(const Node &nw, const Node &ne, const Node &se, const Node &sw, const RGB<double> &mean) {
     int pixels = nw.n_rows * nw.n_cols + ne.n_rows * ne.n_cols + se.n_rows * se.n_cols + sw.n_rows * sw.n_cols;
     auto nw_mean = nw.m_mean,
          ne_mean = ne.m_mean,
@@ -80,7 +85,7 @@ __device__ RGB<double> combine_stds(const Node &nw, const Node &ne, const Node &
     };
 }
 
-__device__ Node make_internal_node(Node &nw, Node &ne, Node &se, Node &sw, int detail_threshold) {
+__device__ __host__ Node make_internal_node(Node &nw, Node &ne, Node &se, Node &sw, int detail_threshold) {
     int height = nw.height + 1;
     int depth = nw.depth - 1;
     int i = nw.i;
@@ -161,7 +166,7 @@ __global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, i
 
     for (int depth = tree_height - 1,// We have already init the leaves of the tree, so we start at the level above
          n_active_threads_per_block = blockDim.x / 4;
-         depth >= min_depth;
+         depth >= min_depth; // the stopping condition could also be n_active_threads_per_block > 0
          depth--, n_active_threads_per_block /= 4) {
 
         int block_offset = n_active_threads_per_block * blockIdx.x;
@@ -196,7 +201,6 @@ __global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, i
                    read_offset);
 #endif
 
-            // fa il calcolo e lo salva
             *write_position = make_internal_node(
                     read_position[0],
                     read_position[1],
@@ -205,6 +209,23 @@ __global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, i
                     detail_threshold);
         }
         __syncthreads();
+    }
+}
+
+__host__ void finish_build_quadtree(Node *quadtree_nodes, int depth, int detail_threshold) {
+    for (int stride = pow(4, depth); stride > 0; stride /= 4) {
+        int write_offset = (stride - 1) / 3;
+        int read_offset = write_offset + stride;
+        Node *write_position = quadtree_nodes + write_offset;
+        Node *read_position = quadtree_nodes + read_offset;
+        for (int write_idx = 0, read_idx = 0; write_idx < stride; write_idx++, read_idx += 4) {
+            write_position[write_idx] = make_internal_node(
+                    read_position[read_idx + 0],
+                    read_position[read_idx + 1],
+                    read_position[read_idx + 2],
+                    read_position[read_idx + 3],
+                    detail_threshold);
+        }
     }
 }
 
@@ -280,42 +301,45 @@ int main(int argc, char *argv[]) {
     int n_pixels = n_rows * n_cols;
 
     spdlog::info("Flattening image...");
-    auto color_soa = flatten(pixels, n_pixels);
+    auto h_color_soa = flatten(pixels, n_pixels);
 
     spdlog::info("Copying pixels onto device...");
-    U8ArraySoa device_soa;
+    U8ArraySoa d_color_soa;
 
-    cudaMalloc(&device_soa.r, n_pixels * sizeof(uint8_t));
-    cudaMalloc(&device_soa.g, n_pixels * sizeof(uint8_t));
-    cudaMalloc(&device_soa.b, n_pixels * sizeof(uint8_t));
+    cudaMalloc(&d_color_soa.r, n_pixels * sizeof(uint8_t));
+    cudaMalloc(&d_color_soa.g, n_pixels * sizeof(uint8_t));
+    cudaMalloc(&d_color_soa.b, n_pixels * sizeof(uint8_t));
 
-    cudaMemcpy(device_soa.r, color_soa.r.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(device_soa.g, color_soa.g.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(device_soa.b, color_soa.b.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_color_soa.r, h_color_soa.r.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_color_soa.g, h_color_soa.g.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_color_soa.b, h_color_soa.b.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice);
 
     spdlog::info("Building quadtree leaves...");
 
     int tree_height = log4(n_pixels);
     int n_nodes = static_cast<int>(std::pow(4, tree_height + 1) / 3);
-    Node *quadtree_nodes = NULL;
-    cudaMalloc(&quadtree_nodes, n_nodes * sizeof(Node));
+    Node *d_quadtree_nodes = NULL;
+    cudaMalloc(&d_quadtree_nodes, n_nodes * sizeof(Node));
 
     dim3 block(16);               // number of threads per block
     dim3 grid(n_pixels / block.x);// number of blocks
-    build_quadtree<<<grid, block>>>(device_soa, quadtree_nodes, tree_height, n_rows, n_cols, detail_threshold);
+    build_quadtree<<<grid, block>>>(d_color_soa, d_quadtree_nodes, tree_height, n_rows, n_cols, detail_threshold);
     cudaDeviceSynchronize();
 
     spdlog::info("Copying pixels back to host...");
 
-    cudaMemcpy(color_soa.r.data(), device_soa.r, n_pixels * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-    cudaMemcpy(color_soa.g.data(), device_soa.g, n_pixels * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-    cudaMemcpy(color_soa.b.data(), device_soa.b, n_pixels * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+    Node *h_quadtree_nodes = static_cast<Node *>(malloc(n_nodes * sizeof(uint8_t)));
+    cudaMemcpy(h_quadtree_nodes, d_quadtree_nodes, n_nodes * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 
-    cudaFree(device_soa.r);
-    cudaFree(device_soa.g);
-    cudaFree(device_soa.b);
+    int from_depth = tree_height - log4(blockDim.x) - 1;
+    finish_build_quadtree(h_quadtree_nodes, from_depth, detail_threshold);
 
-    cudaFree(quadtree_nodes);
+    cudaFree(d_color_soa.r);
+    cudaFree(d_color_soa.g);
+    cudaFree(d_color_soa.b);
+
+    cudaFree(d_quadtree_nodes);
+    free(h_quadtree_nodes);
 
     spdlog::info("Writing output file...", input);
     stbi_write_jpg("result.jpg", n_cols, n_rows, 3, pixels, 100);
