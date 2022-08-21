@@ -239,6 +239,8 @@ int main(int argc, char *argv[]) {
     cudaFree(device_soa.g);
     cudaFree(device_soa.b);
 
+    cudaFree(quadtree_nodes);
+
     spdlog::info("Writing output file...", input);
     stbi_write_jpg("result.jpg", n_cols, n_rows, 3, pixels, 100);
 
