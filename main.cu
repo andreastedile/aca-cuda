@@ -5,12 +5,12 @@
 #include <argparse/argparse.hpp>
 #include <cmath>
 #include <cstdlib>
+#include <cuda_runtime.h>
 #include <iostream>
 #include <spdlog/spdlog.h>
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <stdexcept>
-#include <cuda_runtime.h>
 
 __device__ __host__ int log4(int n) {
     return static_cast<int>(log(n) / log(4));
@@ -61,12 +61,13 @@ __global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, i
 #endif
 
     init_quadtree_leaves(soa, g_nodes, tree_height, n_rows, n_cols);
+    __syncthreads();
 #ifndef NDEBUG
 	if (threadIdx.x == 0 && blockIdx.x == 0){
 		printf("Leaves have been init\n");
 	}
 #endif
-    
+
 
     unsigned int tid = threadIdx.x;
 
@@ -82,17 +83,16 @@ __global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, i
 		printf("min depth: %d\n", min_depth);
 	}
 #endif
-    
 
     for (int depth = tree_height - 1,// We have already init the leaves of the tree, so we start at the level above
-         block_offset = blockDim.x * blockIdx.x / 4;
+         n_active_threads_per_block = blockDim.x / 4;
          depth >= min_depth;
-         depth--, block_offset /= 4) {
+         depth--, n_active_threads_per_block /= 4) {
 
-
+        int block_offset = n_active_threads_per_block * blockIdx.x;
         // il thread corrente ha 4 nodi da processare livello corrente.
         // Questo si verifica quando l'id del thread è < al numero di thread che operano in un blocco a questo livello
-        if (tid < block_offset / blockIdx.x) {
+        if (tid < n_active_threads_per_block) {
 
             int levels_offset = (static_cast<int>(pow(4, depth)) - 1) / 3;
             int write_offset = levels_offset + block_offset + tid;
