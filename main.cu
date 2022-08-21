@@ -3,7 +3,7 @@
 #include "node.h"
 
 #include <argparse/argparse.hpp>
-#include <math.h>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <spdlog/spdlog.h>
@@ -54,7 +54,19 @@ __device__ void init_quadtree_leaves(U8ArraySoa soa, Node *quadtree_nodes, int t
  * @param n_cols
  */
 __global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, int n_rows, int n_cols) {
+#ifndef NDEBUG
+	if (threadIdx.x == 0 && blockIdx.x == 0){
+	    printf("Build quadtree called. Block id: %d, thread id: %d\n", blockIdx.x, threadIdx.x);
+	}
+#endif
+
     init_quadtree_leaves(soa, g_nodes, tree_height, n_rows, n_cols);
+#ifndef NDEBUG
+	if (threadIdx.x == 0 && blockIdx.x == 0){
+		printf("Leaves have been init\n");
+	}
+#endif
+    
 
     unsigned int tid = threadIdx.x;
 
@@ -65,6 +77,12 @@ __global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, i
     // the number of nodes at some level is equal to the number of blocks;
     // this happens when depth reaches the following value:
     const int min_depth = tree_height - log4(blockDim.x);
+#ifndef NDEBUG
+	if (threadIdx.x == 0 && blockIdx.x == 0){
+		printf("min depth: %d\n", min_depth);
+	}
+#endif
+    
 
     for (int depth = tree_height - 1,// We have already init the leaves of the tree, so we start at the level above
          block_offset = blockDim.x * blockIdx.x / 4;
