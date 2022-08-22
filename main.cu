@@ -331,7 +331,7 @@ int main(int argc, char *argv[]) {
     Node *h_quadtree_nodes = static_cast<Node *>(malloc(n_nodes * sizeof(uint8_t)));
     cudaMemcpy(h_quadtree_nodes, d_quadtree_nodes, n_nodes * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 
-    int from_depth = tree_height - log4(blockDim.x) - 1;
+    int from_depth = tree_height - log4(block.x) - 1;
     finish_build_quadtree(h_quadtree_nodes, from_depth, detail_threshold);
 
     cudaFree(d_color_soa.r);
