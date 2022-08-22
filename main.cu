@@ -6,11 +6,19 @@
 #include <cmath>
 #include <cstdlib>
 #include <cuda_runtime.h>
+#include <driver_types.h>
 #include <iostream>
 #include <spdlog/spdlog.h>
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <stdexcept>
+
+void CHECK(cudaError_t error) {
+    if (error != cudaSuccess) {
+        fprintf(stderr, "Got error %s at %s:%d\n", cudaGetErrorString(error), __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+}
 
 /**
  * Compute base 4 integer logarithm of n
@@ -166,7 +174,7 @@ __global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, i
 
     for (int depth = tree_height - 1,// We have already init the leaves of the tree, so we start at the level above
          n_active_threads_per_block = blockDim.x / 4;
-         depth >= min_depth; // the stopping condition could also be n_active_threads_per_block > 0
+         depth >= min_depth;// the stopping condition could also be n_active_threads_per_block > 0
          depth--, n_active_threads_per_block /= 4) {
 
         int block_offset = n_active_threads_per_block * blockIdx.x;
@@ -306,39 +314,39 @@ int main(int argc, char *argv[]) {
     spdlog::info("Copying pixels onto device...");
     U8ArraySoa d_color_soa;
 
-    cudaMalloc(&d_color_soa.r, n_pixels * sizeof(uint8_t));
-    cudaMalloc(&d_color_soa.g, n_pixels * sizeof(uint8_t));
-    cudaMalloc(&d_color_soa.b, n_pixels * sizeof(uint8_t));
+    CHECK(cudaMalloc(&d_color_soa.r, n_pixels * sizeof(uint8_t)));
+    CHECK(cudaMalloc(&d_color_soa.g, n_pixels * sizeof(uint8_t)));
+    CHECK(cudaMalloc(&d_color_soa.b, n_pixels * sizeof(uint8_t)));
 
-    cudaMemcpy(d_color_soa.r, h_color_soa.r.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_color_soa.g, h_color_soa.g.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_color_soa.b, h_color_soa.b.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice);
+    CHECK(cudaMemcpy(d_color_soa.r, h_color_soa.r.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(d_color_soa.g, h_color_soa.g.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(d_color_soa.b, h_color_soa.b.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice));
 
     spdlog::info("Building quadtree leaves...");
 
     int tree_height = log4(n_pixels);
     int n_nodes = static_cast<int>(std::pow(4, tree_height + 1) / 3);
     Node *d_quadtree_nodes = NULL;
-    cudaMalloc(&d_quadtree_nodes, n_nodes * sizeof(Node));
+    CHECK(cudaMalloc(&d_quadtree_nodes, n_nodes * sizeof(Node)));
 
     dim3 block(16);               // number of threads per block
     dim3 grid(n_pixels / block.x);// number of blocks
     build_quadtree<<<grid, block>>>(d_color_soa, d_quadtree_nodes, tree_height, n_rows, n_cols, detail_threshold);
-    cudaDeviceSynchronize();
+    CHECK(cudaDeviceSynchronize());
 
     spdlog::info("Copying pixels back to host...");
 
-    Node *h_quadtree_nodes = static_cast<Node *>(malloc(n_nodes * sizeof(Node)));
-    cudaMemcpy(h_quadtree_nodes, d_quadtree_nodes, n_nodes * sizeof(Node), cudaMemcpyDeviceToHost);
+    Node *h_quadtree_nodes = static_cast<Node *>(malloc(n_nodes * sizeof(uint8_t)));
+    CHECK(cudaMemcpy(h_quadtree_nodes, d_quadtree_nodes, n_nodes * sizeof(uint8_t), cudaMemcpyDeviceToHost));
 
     int from_depth = tree_height - log4(block.x) - 1;
     finish_build_quadtree(h_quadtree_nodes, from_depth, detail_threshold);
 
-    cudaFree(d_color_soa.r);
-    cudaFree(d_color_soa.g);
-    cudaFree(d_color_soa.b);
+    CHECK(cudaFree(d_color_soa.r));
+    CHECK(cudaFree(d_color_soa.g));
+    CHECK(cudaFree(d_color_soa.b));
 
-    cudaFree(d_quadtree_nodes);
+    CHECK(cudaFree(d_quadtree_nodes));
     free(h_quadtree_nodes);
 
     spdlog::info("Writing output file...", input);
