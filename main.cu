@@ -328,8 +328,8 @@ int main(int argc, char *argv[]) {
 
     spdlog::info("Copying pixels back to host...");
 
-    Node *h_quadtree_nodes = static_cast<Node *>(malloc(n_nodes * sizeof(uint8_t)));
-    cudaMemcpy(h_quadtree_nodes, d_quadtree_nodes, n_nodes * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+    Node *h_quadtree_nodes = static_cast<Node *>(malloc(n_nodes * sizeof(Node)));
+    cudaMemcpy(h_quadtree_nodes, d_quadtree_nodes, n_nodes * sizeof(Node), cudaMemcpyDeviceToHost);
 
     int from_depth = tree_height - log4(block.x) - 1;
     finish_build_quadtree(h_quadtree_nodes, from_depth, detail_threshold);
