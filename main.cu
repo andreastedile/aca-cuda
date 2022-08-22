@@ -1,6 +1,7 @@
 #include "flatten.h"
 #include "gpu_types.h"
 #include "node.h"
+#include "colorization.h"
 
 #include <argparse/argparse.hpp>
 #include <cmath>
@@ -347,6 +348,10 @@ int main(int argc, char *argv[]) {
     CHECK(cudaFree(d_color_soa.b));
 
     CHECK(cudaFree(d_quadtree_nodes));
+
+    spdlog::info("Coloring the image...");
+    colorize(pixels, h_quadtree_nodes);
+
     free(h_quadtree_nodes);
 
     spdlog::info("Writing output file...", input);

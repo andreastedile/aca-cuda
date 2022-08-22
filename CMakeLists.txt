@@ -17,8 +17,11 @@ add_executable(app main.cu
         gpu_types.h
         pixel.h
         rgb.h
-        flatten.cpp flatten.cpp
-        node.h )
+        flatten.cpp
+        flatten.h
+        node.h
+        colorization.cpp
+        colorization.h)
 
 set_target_properties(app PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
