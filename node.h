@@ -9,23 +9,20 @@
 
 
 #include "pixel.h"
+
 class Node {
 public:
-    CUDA_HOSTDEV Node(const int height, const int depth, const int i, const int j, const int nRows, const int nCols, const Pixel &mColor, const RGB<double> &mMean, const RGB<double> &mStd, bool isLeaf)
-        : height(height), depth(depth), i(i), j(j), n_rows(nRows), n_cols(nCols), m_color(mColor), m_mean(mMean), m_std(mStd), is_leaf(isLeaf) {}
-    int height;
-    int depth;
+    CUDA_HOSTDEV Node(const RGB<double> &mMean, const RGB<double> &mStd, bool isLeaf)
+        : m_mean(mMean), m_std(mStd), is_leaf(isLeaf) {}
 
-    int i;
-    int j;
-    int n_rows;
-    int n_cols;
-
-    Pixel m_color;
     RGB<double> m_mean;
     RGB<double> m_std;
 
     bool is_leaf;
+
+    [[nodiscard]] Pixel color() const {
+        return {(uint8_t) m_mean.r, (uint8_t) m_mean.g, (uint8_t) m_mean.b};
+    }
 };
 
 #endif//ACA_CUDA_NODE_H
