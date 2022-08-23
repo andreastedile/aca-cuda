@@ -5,7 +5,7 @@
 void colorize_impl(uint8_t *pixels, int N_COLS, const Node *quadtree, int q_idx, int node_i, int node_j, int n_rows, int n_cols, int residual_levels) {
     spdlog::debug("q_idx: {}", q_idx);
 
-    if (residual_levels <= 0 && quadtree[q_idx].is_leaf) {
+    if (residual_levels <= 0 && quadtree[q_idx].m_type == Node::Type::LEAF) {
         const auto i_from = node_i;
         const auto j_from = node_j;
 

@@ -98,9 +98,11 @@ __device__ __host__ RGB<double> combine_stds(const Node &nw, const Node &ne, con
 __device__ __host__ Node make_internal_node(Node &nw, Node &ne, Node &se, Node &sw, int n_rows, int n_cols, int detail_threshold) {
     auto mean = combine_means(nw, ne, se, sw, n_rows, n_cols);
     auto std = combine_stds(nw, ne, se, sw, mean, n_rows, n_cols);
-    bool is_leaf = should_merge(detail_threshold, std);
-
-    return {mean, std, is_leaf};
+    if (should_merge(detail_threshold, std)) {
+        return {mean, std, Node::Type::LEAF};
+    } else {
+        return {mean, std, Node::Type::FORK};
+    }
 }
 
 
@@ -124,7 +126,7 @@ __device__ void init_quadtree_leaves(U8ArraySoa soa, Node *quadtree_nodes, int t
 
     RGB<double> mean = {double(*r_read_ptr), double(*g_read_ptr), double(*b_read_ptr)};
     RGB<double> std = {0.0, 0.0, 0.0};
-    *write_ptr = Node(mean, std, true);
+    *write_ptr = Node(mean, std, Node::Type::LEAF);
 }
 
 /**

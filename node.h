@@ -12,13 +12,19 @@
 
 class Node {
 public:
-    CUDA_HOSTDEV Node(const RGB<double> &mMean, const RGB<double> &mStd, bool isLeaf)
-        : m_mean(mMean), m_std(mStd), is_leaf(isLeaf) {}
+    // https://github.com/NVIDIA/libcudacxx/issues/162
+    enum class Type {
+        LEAF,
+        FORK
+    };
+
+    CUDA_HOSTDEV Node(const RGB<double> &mMean, const RGB<double> &mStd, Type type)
+        : m_mean(mMean), m_std(mStd), m_type(type) {}
 
     RGB<double> m_mean;
     RGB<double> m_std;
 
-    bool is_leaf;
+    Type m_type;
 
     [[nodiscard]] Pixel color() const {
         return {(uint8_t) m_mean.r, (uint8_t) m_mean.g, (uint8_t) m_mean.b};
