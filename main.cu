@@ -13,6 +13,7 @@
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <stdexcept>
+#include <string>
 
 void CHECK(cudaError_t error) {
     if (error != cudaSuccess) {
@@ -254,6 +255,10 @@ int main(int argc, char *argv[]) {
             .scan<'d', int>()
             .default_value(0)
             .help("specify the reduction");
+    app.add_argument("--save-intermediate-levels")
+            .default_value(false)
+            .implicit_value(true)
+            .help("save the intermediate levels to files");
 
     try {
         app.parse_args(argc, argv);
@@ -265,6 +270,7 @@ int main(int argc, char *argv[]) {
     auto input = app.get("input");
     auto max_depth = app.get<int>("--max-depth");
     auto detail_threshold = app.get<int>("--detail-threshold");
+    auto save_intermediate_levels = app.get<bool>("--save-intermediate-levels");
 
     // https://github.com/gabime/spdlog/wiki/3.-Custom-formatting
     // %o Elapsed time in milliseconds since previous message
@@ -342,13 +348,22 @@ int main(int argc, char *argv[]) {
 
     CHECK(cudaFree(d_quadtree_nodes));
 
+    if (save_intermediate_levels) {
+        for (int i = 0; i <= tree_height; i++) {
+            spdlog::info("Coloring the image...");
+            colorize(pixels, n_rows, n_cols, h_quadtree_nodes, i);
+            spdlog::info("Writing output file for level {}...", i);
+            std::string filename = "level" + std::to_string(i) + ".jpg";
+            stbi_write_jpg(filename.c_str(), n_cols, n_rows, 3, pixels, 100);
+        }
+    }
+
     spdlog::info("Coloring the image...");
-    colorize(pixels, n_rows, n_cols, h_quadtree_nodes);
+    colorize(pixels, n_rows, n_cols, h_quadtree_nodes, 0);
+    spdlog::info("Writing output file...");
+    stbi_write_jpg("result.jpg", n_cols, n_rows, 3, pixels, 100);
 
     free(h_quadtree_nodes);
-
-    spdlog::info("Writing output file...", input);
-    stbi_write_jpg("result.jpg", n_cols, n_rows, 3, pixels, 100);
 
     stbi_image_free(pixels);
 
