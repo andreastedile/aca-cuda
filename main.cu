@@ -1,242 +1,19 @@
 #include "colorization.h"
+#include "construction.cuh"
 #include "flatten.h"
 #include "gpu_types.h"
 #include "node.h"
+#include "utils.h"
 
 #include <argparse/argparse.hpp>
-#include <cmath>
 #include <cstdlib>
 #include <cuda_runtime.h>
-#include <driver_types.h>
 #include <iostream>
 #include <spdlog/spdlog.h>
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <stdexcept>
 #include <string>
-
-void CHECK(cudaError_t error) {
-    if (error != cudaSuccess) {
-        fprintf(stderr, "Got error %s at %s:%d\n", cudaGetErrorString(error), __FILE__, __LINE__);
-        exit(EXIT_FAILURE);
-    }
-}
-
-/**
- * Compute base 4 integer logarithm of n
- * @param n
- * @return
- */
-__device__ __host__ int log4(int n) {
-    return static_cast<int>(std::log2(n) / 2);
-}
-
-__device__ __host__ bool should_merge(double detail_threshold, const RGB<double> &std) {
-    return std.r <= detail_threshold ||
-           std.g <= detail_threshold ||
-           std.b <= detail_threshold;
-}
-
-// source
-// https://stats.stackexchange.com/questions/25848/how-to-sum-a-standard-deviation/442050#442050
-__device__ __host__ RGB<double> combine_means(const Node &nw, const Node &ne, const Node &se, const Node &sw, int n_rows, int n_cols) {
-    int pixels = n_rows * n_cols + n_rows * n_cols + n_rows * n_cols + n_rows * n_cols;
-    auto nw_mean = nw.m_mean,
-         ne_mean = ne.m_mean,
-         se_mean = se.m_mean,
-         sw_mean = sw.m_mean;
-    auto nw_pixels = n_rows * n_cols,
-         ne_pixels = n_rows * n_cols,
-         se_pixels = n_rows * n_cols,
-         sw_pixels = n_rows * n_cols;
-    return {
-            (nw_mean.r * nw_pixels + ne_mean.r * ne_pixels + se_mean.r * se_pixels + sw_mean.r * sw_pixels) / pixels,
-            (nw_mean.g * nw_pixels + ne_mean.g * ne_pixels + se_mean.g * se_pixels + sw_mean.g * sw_pixels) / pixels,
-            (nw_mean.b * nw_pixels + ne_mean.b * ne_pixels + se_mean.b * se_pixels + sw_mean.b * sw_pixels) / pixels,
-    };
-}
-
-__device__ __host__ RGB<double> combine_stds(const Node &nw, const Node &ne, const Node &se, const Node &sw, const RGB<double> &mean, int n_rows, int n_cols) {
-    int pixels = n_rows * n_cols + n_rows * n_cols + n_rows * n_cols + n_rows * n_cols;
-    auto nw_mean = nw.m_mean,
-         ne_mean = ne.m_mean,
-         se_mean = se.m_mean,
-         sw_mean = sw.m_mean;
-    auto nw_std = nw.m_std,
-         ne_std = ne.m_std,
-         se_std = se.m_std,
-         sw_std = sw.m_std;
-    auto nw_pixels = n_rows * n_cols,
-         ne_pixels = n_rows * n_cols,
-         se_pixels = n_rows * n_cols,
-         sw_pixels = n_rows * n_cols;
-
-    return {
-            std::sqrt(
-                    (std::pow(nw_std.r, 2) * nw_pixels + nw_pixels * std::pow(mean.r - nw_mean.r, 2) +
-                     std::pow(ne_std.r, 2) * ne_pixels + ne_pixels * std::pow(mean.r - ne_mean.r, 2) +
-                     std::pow(se_std.r, 2) * se_pixels + se_pixels * std::pow(mean.r - se_mean.r, 2) +
-                     std::pow(sw_std.r, 2) * sw_pixels + sw_pixels * std::pow(mean.r - sw_mean.r, 2)) /
-                    pixels),
-
-            std::sqrt(
-                    (std::pow(nw_std.g, 2) * nw_pixels + nw_pixels * std::pow(mean.g - nw_mean.g, 2) +
-                     std::pow(ne_std.g, 2) * ne_pixels + ne_pixels * std::pow(mean.g - ne_mean.g, 2) +
-                     std::pow(se_std.g, 2) * se_pixels + se_pixels * std::pow(mean.g - se_mean.g, 2) +
-                     std::pow(sw_std.g, 2) * sw_pixels + sw_pixels * std::pow(mean.g - sw_mean.g, 2)) /
-                    pixels),
-
-            std::sqrt(
-                    (std::pow(nw_std.b, 2) * nw_pixels + nw_pixels * std::pow(mean.b - nw_mean.b, 2) +
-                     std::pow(ne_std.b, 2) * ne_pixels + ne_pixels * std::pow(mean.b - ne_mean.b, 2) +
-                     std::pow(se_std.b, 2) * se_pixels + se_pixels * std::pow(mean.b - se_mean.b, 2) +
-                     std::pow(sw_std.b, 2) * sw_pixels + sw_pixels * std::pow(mean.b - sw_mean.b, 2)) /
-                    pixels),
-    };
-}
-
-__device__ __host__ Node make_internal_node(Node &nw, Node &ne, Node &se, Node &sw, int n_rows, int n_cols, int detail_threshold) {
-    auto mean = combine_means(nw, ne, se, sw, n_rows, n_cols);
-    auto std = combine_stds(nw, ne, se, sw, mean, n_rows, n_cols);
-    if (should_merge(detail_threshold, std)) {
-        return {mean, std, Node::Type::LEAF};
-    } else {
-        return {mean, std, Node::Type::FORK};
-    }
-}
-
-
-__device__ void init_quadtree_leaves(U8ArraySoa soa, Node *quadtree_nodes, int tree_height, int n_rows, int n_cols) {
-    int n_higher_nodes = static_cast<int>((pow(4, tree_height) - 1) / 3);
-    int block_offset = blockIdx.x * blockDim.x;
-
-    Node *write_ptr = quadtree_nodes + n_higher_nodes + block_offset + threadIdx.x;
-
-    auto r_read_ptr = soa.r + block_offset + threadIdx.x;
-    auto g_read_ptr = soa.g + block_offset + threadIdx.x;
-    auto b_read_ptr = soa.b + block_offset + threadIdx.x;
-
-#ifndef NDEBUG
-    printf("[%3d/%3d] n_higher_nodes: %3d, block_offset: %3d → read @ %3d, write @ %3d\n",
-           blockIdx.x, threadIdx.x,
-           n_higher_nodes, block_offset,
-           block_offset + threadIdx.x,
-           n_higher_nodes + block_offset + threadIdx.x);
-#endif
-
-    RGB<double> mean = {double(*r_read_ptr), double(*g_read_ptr), double(*b_read_ptr)};
-    RGB<double> std = {0.0, 0.0, 0.0};
-    *write_ptr = Node(mean, std, Node::Type::LEAF);
-}
-
-/**
- *
- * @param soa
- * @param g_nodes Pointer to the whole array of nodes implementing the quadtree
- * @param tree_height
- * @param n_rows
- * @param n_cols
- */
-__global__ void build_quadtree(U8ArraySoa soa, Node *g_nodes, int tree_height, int n_rows, int n_cols, int detail_threshold) {
-    init_quadtree_leaves(soa, g_nodes, tree_height, n_rows, n_cols);
-    __syncthreads();
-
-    unsigned int tid = threadIdx.x;
-
-    // We want to build the quadtree with an iterative reduction that
-    // starts from the leaf nodes and proceeds towards the root node,
-    // progressively building the intermediate levels.
-    // The iteration implementing the reduction stops when
-    // the number of nodes at some level is equal to the number of blocks;
-    // this happens when depth reaches the following value:
-    const int min_depth = tree_height - log4(blockDim.x);
-#ifndef NDEBUG
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        printf("min depth: %d\n", min_depth);
-    }
-#endif
-
-    for (int depth = tree_height - 1,// We have already init the leaves of the tree, so we start at the level above
-         n_active_threads_per_block = blockDim.x / 4,
-             children_n_rows = 1,
-             children_n_cols = 1;
-         depth >= min_depth;// the stopping condition could also be n_active_threads_per_block > 0
-         depth--, n_active_threads_per_block /= 4,
-             children_n_rows *= 4,
-             children_n_cols *= 4) {
-
-        int block_offset = n_active_threads_per_block * blockIdx.x;
-
-        // il thread corrente ha 4 nodi da processare livello corrente.
-        // Questo si verifica quando l'id del thread è < al numero di thread che operano in un blocco a questo livello
-        if (tid < n_active_threads_per_block) {
-
-            int levels_offset = (static_cast<int>(pow(4, depth)) - 1) / 3;
-            int write_offset = levels_offset + block_offset + tid;
-            // Pointer in g_nodes where to write the result of the reduction
-            Node *write_position = g_nodes + write_offset;
-
-            int read_offset = 4 * write_offset + 1;
-            // Pointer in g_nodes where to read the four nodes to reduce
-            Node *read_position = g_nodes + read_offset;
-
-#ifndef NDEBUG
-            printf("[block %d / thread %d]: "
-                   "depth: %d, "
-                   "block offset: %d, "
-                   "depth >= min depth (%d): %d, "
-                   "block offset: %d, "
-                   "write_pos: %d, "
-                   "read_pos: %d\n",
-                   blockIdx.x,
-                   tid,
-                   depth,
-                   block_offset,
-                   min_depth, depth >= min_depth,
-                   block_offset,
-                   write_offset,
-                   read_offset);
-#endif
-
-            *write_position = make_internal_node(
-                    read_position[0],
-                    read_position[1],
-                    read_position[2],
-                    read_position[3],
-                    children_n_rows,
-                    children_n_cols,
-                    detail_threshold);
-        }
-        __syncthreads();
-    }
-}
-
-__host__ void finish_build_quadtree(Node *quadtree_nodes, int depth, int height, int detail_threshold) {
-    for (int stride = pow(4, depth),
-             children_n_rows = pow(4, height - 1),
-             children_n_cols = pow(4, height - 1);
-         stride > 0;
-         stride /= 4, children_n_rows *= 4, children_n_cols *= 4) {
-        int write_offset = (stride - 1) / 3;
-        int read_offset = write_offset + stride;
-        Node *write_position = quadtree_nodes + write_offset;
-        Node *read_position = quadtree_nodes + read_offset;
-        for (int write_idx = 0, read_idx = 0; write_idx < stride; write_idx++, read_idx += 4) {
-            write_position[write_idx] = make_internal_node(
-                    read_position[read_idx + 0],
-                    read_position[read_idx + 1],
-                    read_position[read_idx + 2],
-                    read_position[read_idx + 3],
-                    children_n_cols,
-                    children_n_rows,
-                    detail_threshold);
-        }
-    }
-}
-
-bool is_power_of_four(int n) {
-    return n == pow(4, log4(n));
-}
 
 int main(int argc, char *argv[]) {
     argparse::ArgumentParser app("jqc");
@@ -245,18 +22,10 @@ int main(int argc, char *argv[]) {
     app.add_argument("input")
             .required()
             .help("specify the input file");
-    app.add_argument("--max-depth")
-            .scan<'d', int>()
-            .default_value(8)
-            .help("specify the max depth");
-    app.add_argument("--detail-threshold")
-            .scan<'d', int>()
-            .default_value(13)
+    app.add_argument("-d", "--detail-threshold")
+            .scan<'g', double>()
+            .default_value(13.0)
             .help("specify the detail threshold");
-    app.add_argument("--reduction")
-            .scan<'d', int>()
-            .default_value(0)
-            .help("specify the reduction");
     app.add_argument("--save-intermediate-levels")
             .default_value(false)
             .implicit_value(true)
@@ -270,101 +39,85 @@ int main(int argc, char *argv[]) {
     }
 
     auto input = app.get("input");
-    auto max_depth = app.get<int>("--max-depth");
     auto detail_threshold = app.get<int>("--detail-threshold");
     auto save_intermediate_levels = app.get<bool>("--save-intermediate-levels");
 
-    // https://github.com/gabime/spdlog/wiki/3.-Custom-formatting
-    // %o Elapsed time in milliseconds since previous message
-    // %^ start color range (can be used only once)
-    // %l The log level of the message
-    // %$ end color range (for example %^[+++]%$ %v) (can be used only once)
-    // %v The actual text to log
     spdlog::set_pattern("[elapsed: %o ms] [%^%l%$] %v");
+    spdlog::set_level(spdlog::level::debug);
 
-#ifdef NDEBUG
-    spdlog::warn("jqc compiled in RELEASE mode");
-#else
+#ifndef NDEBUG
     spdlog::warn("jqc compiled in DEBUG mode");
 #endif
 
     spdlog::info("Reading {}...", input);
 
-    int n_cols, n_rows, n;
+    int n_cols, n_rows, n, n_pixels;
     uint8_t *pixels = stbi_load(input.c_str(), &n_cols, &n_rows, &n, 3);
     if (!pixels) {
         spdlog::error("Could not open file " + input);
         std::exit(EXIT_FAILURE);
+    } else {
+        n_pixels = n_rows * n_cols;
+        spdlog::info("Image is {}x{} px ({})", n_rows, n_cols, n_pixels);
+
+        if (n_cols != n_rows) {
+            spdlog::error("Image is not square");
+            std::exit(EXIT_FAILURE);
+        }
+        if (!is_power_of_four(n_rows) || !is_power_of_four(n_cols)) {
+            spdlog::error("The number of pixels on the sides of the image is not a power of four");
+            std::exit(EXIT_FAILURE);
+        }
     }
 
-    spdlog::info("Image is {}x{} px", n_rows, n_cols);
+    spdlog::info("Flattening the image...");
+    U8VectorSoa h_color_soa = flatten(pixels, n_pixels);
 
-    if (n_cols != n_rows) {
-        spdlog::error("Image is not square");
-        std::exit(EXIT_FAILURE);
-    }
-    if (!is_power_of_four(n_rows) || !is_power_of_four(n_cols)) {
-        spdlog::error("The number of pixels on the sides of the image is not a power of four");
-        std::exit(EXIT_FAILURE);
-    }
+    spdlog::info("Copying the pixels on the device...");
+    U8ArraySoa d_color_soa(h_color_soa);
 
-    int n_pixels = n_rows * n_cols;
-
-    spdlog::info("Flattening image...");
-    auto h_color_soa = flatten(pixels, n_pixels);
-
-    spdlog::info("Copying pixels onto device...");
-    U8ArraySoa d_color_soa;
-
-    CHECK(cudaMalloc(&d_color_soa.r, n_pixels * sizeof(uint8_t)));
-    CHECK(cudaMalloc(&d_color_soa.g, n_pixels * sizeof(uint8_t)));
-    CHECK(cudaMalloc(&d_color_soa.b, n_pixels * sizeof(uint8_t)));
-
-    CHECK(cudaMemcpy(d_color_soa.r, h_color_soa.r.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(d_color_soa.g, h_color_soa.g.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(d_color_soa.b, h_color_soa.b.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice));
-
-    spdlog::info("Building quadtree leaves...");
+    // The first part of the quadtree is built on the device, and the remaining on the host.
+    Node *d_quadtree_nodes;
+    Node *h_quadtree_nodes;
 
     int tree_height = log4(n_pixels);
-    int n_nodes = static_cast<int>(std::pow(4, tree_height + 1) / 3);
-    Node *d_quadtree_nodes = NULL;
+    int n_nodes = (pow4(tree_height + 1) - 1) / 3;
+
+    spdlog::info("Allocating memory for the quadtree (height: {}, nodes: {})...", tree_height, n_nodes);
     CHECK(cudaMalloc(&d_quadtree_nodes, n_nodes * sizeof(Node)));
 
-    dim3 block(16);               // number of threads per block
-    dim3 grid(n_pixels / block.x);// number of blocks
-    build_quadtree<<<grid, block>>>(d_color_soa, d_quadtree_nodes, tree_height, n_rows, n_cols, detail_threshold);
+    dim3 n_threads_per_block(16);
+    dim3 n_blocks(n_pixels / n_threads_per_block.x);
+    spdlog::info("Building the quadtreee on the device (blocks: {}, threads per block: {})...", n_blocks.x, n_threads_per_block.x);
+    build_quadtree_device<<<n_blocks, n_threads_per_block>>>(d_color_soa, d_quadtree_nodes, tree_height, n_rows, n_cols, detail_threshold);
     CHECK(cudaDeviceSynchronize());
 
-    spdlog::info("Copying pixels back to host...");
-
-    Node *h_quadtree_nodes = static_cast<Node *>(malloc(n_nodes * sizeof(Node)));
+    spdlog::info("Copying the quadtree back to the host...");
+    h_quadtree_nodes = static_cast<Node *>(malloc(n_nodes * sizeof(Node)));
     CHECK(cudaMemcpy(h_quadtree_nodes, d_quadtree_nodes, n_nodes * sizeof(Node), cudaMemcpyDeviceToHost));
 
-    int from_depth = tree_height - log4(block.x) - 1;
-    finish_build_quadtree(h_quadtree_nodes, from_depth, tree_height - from_depth, detail_threshold);
-
-    CHECK(cudaFree(d_color_soa.r));
-    CHECK(cudaFree(d_color_soa.g));
-    CHECK(cudaFree(d_color_soa.b));
-
-    CHECK(cudaFree(d_quadtree_nodes));
+    int from_depth = tree_height - log4(n_threads_per_block.x) - 1;
+    spdlog::info("Building the remaining quadtree on the host (from depth: {})...", from_depth);
+    build_quadtree_host(h_quadtree_nodes, from_depth, tree_height - from_depth, detail_threshold);
 
     if (save_intermediate_levels) {
-        for (int i = 0; i <= tree_height; i++) {
-            spdlog::info("Coloring the image...");
+        for (int i = 0; i < tree_height; i++) {
+            spdlog::info("Coloring the image for level {}...", i);
             colorize(pixels, n_rows, n_cols, h_quadtree_nodes, i);
-            spdlog::info("Writing output file for level {}...", i);
+
+            spdlog::info("Writing the output file for level {}...", i);
             std::string filename = "level" + std::to_string(i) + ".jpg";
             stbi_write_jpg(filename.c_str(), n_cols, n_rows, 3, pixels, 100);
         }
     }
 
-    spdlog::info("Coloring the image...");
+    spdlog::info("Coloring the resulting image...");
     colorize(pixels, n_rows, n_cols, h_quadtree_nodes, 0);
-    spdlog::info("Writing output file...");
+
+    spdlog::info("Writing the resulting output file...");
     stbi_write_jpg("result.jpg", n_cols, n_rows, 3, pixels, 100);
 
+    CHECK(cudaFree(d_quadtree_nodes));
     free(h_quadtree_nodes);
 
     stbi_image_free(pixels);
