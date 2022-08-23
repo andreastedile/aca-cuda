@@ -115,7 +115,7 @@ __device__ void init_quadtree_leaves(U8ArraySoa soa, Node *quadtree_nodes, int t
     auto b_read_ptr = soa.b + block_offset + threadIdx.x;
 
 #ifndef NDEBUG
-    printf("[%3d/%3d] n_higher_nodes: %3d, block_offset: %3d → read @ %3d, write @ %3d",
+    printf("[%3d/%3d] n_higher_nodes: %3d, block_offset: %3d → read @ %3d, write @ %3d\n",
            blockIdx.x, threadIdx.x,
            n_higher_nodes, block_offset,
            block_offset + threadIdx.x,

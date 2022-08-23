@@ -12,19 +12,19 @@ void colorize_impl(uint8_t *pixels, int N_COLS, const Node *quadtree, int q_idx,
         const auto i_to = i_from + n_rows;
         const auto j_to = j_from + n_cols;
 
-        spdlog::debug("is leaf.\n"
-                      "i from = {}\n"
-                      "i to = {}\n"
-                      "j from = {}\n"
-                      "j to = {}\n",
+        spdlog::debug("is leaf., "
+                      "i from = {}, "
+                      "i to = {}, "
+                      "j from = {}, "
+                      "j to = {}",
                       i_from, i_to, j_from, j_to);
 
         for (int i = i_from; i < i_to; i++) {
             for (auto j = j_from; j < j_to; j++) {
-                spdlog::debug("i = {}, j = {},\n"
-                              "(i * N_COLS + j) * 3 + 0 = {}\n",
-                              "(i * N_COLS + j) * 3 + 1 = {}\n"
-                              "(i * N_COLS + j) * 3 + 2 = {}\n",
+                spdlog::debug("i = {}, j = {}, "
+                              "(i * N_COLS + j) * 3 + 0 = {}, ",
+                              "(i * N_COLS + j) * 3 + 1 = {}, "
+                              "(i * N_COLS + j) * 3 + 2 = {}",
                               i, j,
                               (i * N_COLS + j) * 3 + 0,
                               (i * N_COLS + j) * 3 + 1,
@@ -36,10 +36,10 @@ void colorize_impl(uint8_t *pixels, int N_COLS, const Node *quadtree, int q_idx,
         }
     } else {
         spdlog::debug("is fork.\n"
-                      "4 * q_idx + 1 = {}\n"
-                      "4 * q_idx + 2 = {}\n"
-                      "4 * q_idx + 3 = {}\n"
-                      "4 * q_idx + 4 = {}\n",
+                      "4 * q_idx + 1 = {}, "
+                      "4 * q_idx + 2 = {}, "
+                      "4 * q_idx + 3 = {}, "
+                      "4 * q_idx + 4 = {}",
                       4 * q_idx + 1,
                       4 * q_idx + 2,
                       4 * q_idx + 3,
