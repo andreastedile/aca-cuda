@@ -20,8 +20,8 @@ void flatten_data_impl(const uint8_t *pixels,
         // clang-format off
         flatten_data_impl(pixels, soa, i + 0,      j + 0,      q_rows, q_cols, idx + q_size * 0, N_COLS); // nw
         flatten_data_impl(pixels, soa, i + 0,      j + q_cols, q_rows, q_cols, idx + q_size * 1, N_COLS); // ne
-        flatten_data_impl(pixels, soa, i + q_rows, j + 0,      q_rows, q_cols, idx + q_size * 2, N_COLS); // sw
-        flatten_data_impl(pixels, soa, i + q_rows, j + q_cols, q_rows, q_cols, idx + q_size * 3, N_COLS); // se
+        flatten_data_impl(pixels, soa, i + q_rows, j + q_cols, q_rows, q_cols, idx + q_size * 2, N_COLS); // se
+        flatten_data_impl(pixels, soa, i + q_rows, j + 0,      q_rows, q_cols, idx + q_size * 3, N_COLS); // sw
         // clang-format on
     }
 }
