@@ -20,6 +20,7 @@ add_executable(app main.cu
         flatten.cpp
         flatten.h
         node.h
+        utils.cu
         utils.h
         construction.cu
         construction.cuh
