@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
     auto input = app.get("input");
     int n_blocks = app.get<int>("--blocks");
     int n_threads_per_block = app.get<int>("--threads");
-    auto detail_threshold = app.get<int>("--detail-threshold");
+    auto detail_threshold = app.get<double>("--detail-threshold");
     auto save_intermediate_levels = app.get<bool>("--save-intermediate-levels");
 
     spdlog::set_pattern("[elapsed: %o ms] [%^%l%$] %v");
