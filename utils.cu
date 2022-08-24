@@ -1,7 +1,6 @@
 #include "utils.h"
 
 #include <cmath>
-#include <cstdio>
 
 /**
 * Assumes that n is a power of four
@@ -21,9 +20,4 @@ bool is_power_of_four(int n) {
     return n == std::pow(4, log4(n));
 }
 
-void CHECK(cudaError_t error) {
-    if (error != cudaSuccess) {
-        fprintf(stderr, "Got error %s at %s:%d\n", cudaGetErrorString(error), __FILE__, __LINE__);
-        exit(EXIT_FAILURE);
-    }
-}
+
