@@ -111,7 +111,7 @@ int main(int argc, char *argv[]) {
     h_quadtree_nodes = static_cast<Node *>(malloc(n_nodes * sizeof(Node)));
     CHECK(cudaMemcpy(h_quadtree_nodes, d_quadtree_nodes, n_nodes * sizeof(Node), cudaMemcpyDeviceToHost));
 
-    int from_depth = tree_height - log4(n_threads_per_block.x) - 1;
+    int from_depth = tree_height - log4(n_threads_per_block) - 1;
     spdlog::info("Building the remaining quadtree on the host (from depth: {})...", from_depth);
     build_quadtree_host(h_quadtree_nodes, from_depth, tree_height - from_depth, detail_threshold);
 
