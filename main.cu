@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (n_blocks * n_threads_per_block != n_pixels) {
-        spdlog::error("The number of blocks times the number of threads per block {} is not equal to the number of pixels of the image {}", n_blocks * n_threads_per_block, n_pixels);
+        spdlog::error("The number of blocks times the number of threads per block ({}) is not equal to the number of pixels of the image ({})", n_blocks * n_threads_per_block, n_pixels);
         std::exit(EXIT_FAILURE);
     }
 
