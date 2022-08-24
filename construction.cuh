@@ -6,7 +6,7 @@
 
 #include <cstdio>
 
-__global__ void build_quadtree_device(const U8ArraySoa& soa, Node *g_nodes, int tree_height, int n_rows, int n_cols, double detail_threshold);
+__global__ void build_quadtree_device(U8ArraySoa soa, Node *g_nodes, int tree_height, int n_rows, int n_cols, double detail_threshold);
 
 __host__ void build_quadtree_host(Node *quadtree_nodes, int depth, int height, double detail_threshold);
 

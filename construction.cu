@@ -64,7 +64,7 @@ __device__ __host__ Node make_internal_node(Node &nw, Node &ne, Node &se, Node &
 }
 
 
-__device__ void init_quadtree_leaves(const U8ArraySoa& soa, Node *quadtree_nodes, int tree_height) {
+__device__ void init_quadtree_leaves(U8ArraySoa soa, Node *quadtree_nodes, int tree_height) {
     int n_higher_nodes = (pow4(tree_height) - 1) / 3;
     int block_offset = blockIdx.x * blockDim.x;
 
@@ -116,7 +116,7 @@ __host__ void build_quadtree_host(Node *quadtree_nodes, int depth, int height, d
 * @param n_rows
 * @param n_cols
 */
-__global__ void build_quadtree_device(const U8ArraySoa& soa, Node *g_nodes, int tree_height, int n_rows, int n_cols, double detail_threshold) {
+__global__ void build_quadtree_device(U8ArraySoa soa, Node *g_nodes, int tree_height, int n_rows, int n_cols, double detail_threshold) {
     init_quadtree_leaves(soa, g_nodes, tree_height);
     __syncthreads();
 

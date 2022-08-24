@@ -132,6 +132,7 @@ int main(int argc, char *argv[]) {
     spdlog::info("Writing the resulting output file...");
     stbi_write_jpg("result.jpg", n_cols, n_rows, 3, pixels, 100);
 
+    d_color_soa.dispose();
     CHECK(cudaFree(d_quadtree_nodes));
     free(h_quadtree_nodes);
 

@@ -20,7 +20,7 @@ public:
         CHECK(cudaMemcpy(g, soa.g.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice));
         CHECK(cudaMemcpy(b, soa.b.data(), n_pixels * sizeof(uint8_t), cudaMemcpyHostToDevice));
     }
-    ~U8ArraySoa() {
+    __host__ void dispose() {
         CHECK(cudaFree(r));
         CHECK(cudaFree(g));
         CHECK(cudaFree(b));
