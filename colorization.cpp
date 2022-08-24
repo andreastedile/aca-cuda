@@ -3,7 +3,7 @@
 #include <spdlog/spdlog.h>
 
 void colorize_impl(uint8_t *pixels, int N_COLS, const Node *quadtree, int q_idx, int node_i, int node_j, int n_rows, int n_cols, int residual_levels) {
-    spdlog::debug("q_idx: {}", q_idx);
+    SPDLOG_DEBUG("q_idx: {}", q_idx);
 
     if (residual_levels <= 0 && quadtree[q_idx].m_type == Node::Type::LEAF) {
         const auto i_from = node_i;
@@ -12,7 +12,7 @@ void colorize_impl(uint8_t *pixels, int N_COLS, const Node *quadtree, int q_idx,
         const auto i_to = i_from + n_rows;
         const auto j_to = j_from + n_cols;
 
-        spdlog::debug("is leaf., "
+        SPDLOG_DEBUG("is leaf., "
                       "i from = {}, "
                       "i to = {}, "
                       "j from = {}, "
@@ -21,7 +21,7 @@ void colorize_impl(uint8_t *pixels, int N_COLS, const Node *quadtree, int q_idx,
 
         for (int i = i_from; i < i_to; i++) {
             for (auto j = j_from; j < j_to; j++) {
-                spdlog::debug("i = {}, j = {}, "
+                SPDLOG_DEBUG("i = {}, j = {}, "
                               "(i * N_COLS + j) * 3 + 0 = {}, ",
                               "(i * N_COLS + j) * 3 + 1 = {}, "
                               "(i * N_COLS + j) * 3 + 2 = {}",
@@ -35,7 +35,7 @@ void colorize_impl(uint8_t *pixels, int N_COLS, const Node *quadtree, int q_idx,
             }
         }
     } else {
-        spdlog::debug("is fork.\n"
+        SPDLOG_DEBUG("is fork.\n"
                       "4 * q_idx + 1 = {}, "
                       "4 * q_idx + 2 = {}, "
                       "4 * q_idx + 3 = {}, "
