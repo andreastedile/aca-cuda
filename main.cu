@@ -22,6 +22,14 @@ int main(int argc, char *argv[]) {
     app.add_argument("input")
             .required()
             .help("specify the input file");
+    app.add_argument("-b", "--blocks")
+            .scan<'d', int>()
+            .required()
+            .help("specify the number of blocks in the kernel launch");
+    app.add_argument("-t", "--threads")
+            .scan<'d', int>()
+            .required()
+            .help("specify the number of thread per blocks in the kernel launch");
     app.add_argument("-d", "--detail-threshold")
             .scan<'g', double>()
             .default_value(13.0)
@@ -39,6 +47,8 @@ int main(int argc, char *argv[]) {
     }
 
     auto input = app.get("input");
+    int n_blocks = app.get<int>("--blocks");
+    int n_threads_per_block = app.get<int>("--threads");
     auto detail_threshold = app.get<int>("--detail-threshold");
     auto save_intermediate_levels = app.get<bool>("--save-intermediate-levels");
 
@@ -70,6 +80,11 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    if (n_blocks * n_threads_per_block != n_pixels) {
+        spdlog::error("The number of blocks times the number of threads per block {} is not equal to the number of pixels of the image {}", n_blocks * n_threads_per_block, n_pixels);
+        std::exit(EXIT_FAILURE);
+    }
+
     spdlog::info("Flattening the image...");
     U8VectorSoa h_color_soa = flatten(pixels, n_pixels);
 
@@ -86,10 +101,10 @@ int main(int argc, char *argv[]) {
     spdlog::info("Allocating memory for the quadtree (height: {}, nodes: {})...", tree_height, n_nodes);
     CHECK(cudaMalloc(&d_quadtree_nodes, n_nodes * sizeof(Node)));
 
-    dim3 n_threads_per_block(16);
-    dim3 n_blocks(n_pixels / n_threads_per_block.x);
-    spdlog::info("Building the quadtreee on the device (blocks: {}, threads per block: {})...", n_blocks.x, n_threads_per_block.x);
-    build_quadtree_device<<<n_blocks, n_threads_per_block>>>(d_color_soa, d_quadtree_nodes, tree_height, n_rows, n_cols, detail_threshold);
+    dim3 threads(n_threads_per_block);
+    dim3 blocks(n_pixels / threads.x);
+    spdlog::info("Building the quadtreee on the device (blocks: {}, threads per block: {})...", blocks.x, threads.x);
+    build_quadtree_device<<<blocks, threads>>>(d_color_soa, d_quadtree_nodes, tree_height, n_rows, n_cols, detail_threshold);
     CHECK(cudaDeviceSynchronize());
 
     spdlog::info("Copying the quadtree back to the host...");
