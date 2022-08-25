@@ -36,7 +36,10 @@ set_target_properties(app PROPERTIES CUDA_ARCHITECTURES "60")
 target_compile_definitions(app PUBLIC STB_IMAGE_IMPLEMENTATION)
 target_compile_definitions(app PUBLIC STB_IMAGE_WRITE_IMPLEMENTATION)
 
-if (DEBUG_CONSTRUCTION)
+if (DEBUG_DEVICE_CONSTRUCTION)
+    target_compile_definitions(app PUBLIC DEBUG_DEVICE_CONSTRUCTION)
+endif ()
+if (DEBUG_COLORIZATION)
     target_compile_definitions(app PUBLIC SPDLOG_LEVEL_DEBUG)
 endif ()
 

@@ -3,6 +3,9 @@
 
 #include <omp.h>
 #include <spdlog/spdlog.h>
+#ifdef DEBUG_DEVICE_CONSTRUCTION
+#include <cstdio>
+#endif
 
 
 __device__ __host__ bool should_merge(double detail_threshold, const RGB<double> &std) {
@@ -77,7 +80,7 @@ __device__ void init_quadtree_leaves(U8ArraySoa soa, Node *quadtree_nodes, int t
     auto g_read_ptr = soa.g + block_offset + threadIdx.x;
     auto b_read_ptr = soa.b + block_offset + threadIdx.x;
 
-#ifndef NDEBUG
+#ifdef DEBUG_DEVICE_CONSTRUCTION
     printf("[%3d/%3d] n_higher_nodes: %3d, block_offset: %3d → read @ %3d, write @ %3d\n",
            blockIdx.x, threadIdx.x,
            n_higher_nodes, block_offset,
@@ -93,7 +96,7 @@ __device__ void init_quadtree_leaves(U8ArraySoa soa, Node *quadtree_nodes, int t
 __host__ void build_quadtree_host(Node *quadtree_nodes, int depth, int height, double detail_threshold) {
 #pragma omp parallel num_threads(8)
     {
-#ifndef NDEBUG
+#ifdef DEBUG_DEVICE_CONSTRUCTION
         spdlog::debug("Thread {}", omp_get_thread_num());
 #endif
         for (int stride = pow4(depth), subquadrant_n_pixels = pow4(height - 1);
@@ -140,7 +143,7 @@ __global__ void build_quadtree_device(U8ArraySoa soa, Node *g_nodes, int tree_he
     // the number of nodes at some level is equal to the number of blocks;
     // this happens when depth reaches the following value:
     const int min_depth = tree_height - log4(blockDim.x);
-#ifndef NDEBUG
+#ifdef DEBUG_DEVICE_CONSTRUCTION
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         printf("min depth: %d\n", min_depth);
     }
@@ -168,7 +171,7 @@ __global__ void build_quadtree_device(U8ArraySoa soa, Node *g_nodes, int tree_he
             // Pointer in g_nodes where to read the four nodes to reduce
             Node *read_position = g_nodes + read_offset;
 
-#ifndef NDEBUG
+#ifdef DEBUG_DEVICE_CONSTRUCTION
             printf("[block %d / thread %d]: "
                    "depth: %d, "
                    "block offset: %d, "
