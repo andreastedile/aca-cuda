@@ -96,7 +96,7 @@ __device__ void init_quadtree_leaves(U8ArraySoa soa, Node *quadtree_nodes, int t
 __host__ void build_quadtree_host(Node *quadtree_nodes, int depth, int height, double detail_threshold) {
 #pragma omp parallel num_threads(8)
     {
-#ifdef DEBUG_DEVICE_CONSTRUCTION
+#ifdef DEBUG_HOST_CONSTRUCTION
         spdlog::debug("Thread {}", omp_get_thread_num());
 #endif
         for (int stride = pow4(depth), subquadrant_n_pixels = pow4(height - 1);
