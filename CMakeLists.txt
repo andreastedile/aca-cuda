@@ -11,6 +11,7 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
 find_package(argparse REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(stb REQUIRED)
+find_package(OpenMP REQUIRED)
 
 add_executable(app main.cu
         cpu_types.h
@@ -42,3 +43,4 @@ endif ()
 target_link_libraries(app argparse::argparse)
 target_link_libraries(app spdlog::spdlog)
 target_link_libraries(app stb::stb)
+target_link_libraries(app OpenMP::OpenMP_CXX)

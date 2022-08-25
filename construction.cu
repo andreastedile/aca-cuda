@@ -1,6 +1,9 @@
 #include "construction.cuh"
 #include "utils.h"
 
+#include <omp.h>
+#include <spdlog/spdlog.h>
+
 
 __device__ __host__ bool should_merge(double detail_threshold, const RGB<double> &std) {
     return std.r <= detail_threshold ||
@@ -88,21 +91,29 @@ __device__ void init_quadtree_leaves(U8ArraySoa soa, Node *quadtree_nodes, int t
 }
 
 __host__ void build_quadtree_host(Node *quadtree_nodes, int depth, int height, double detail_threshold) {
-    for (int stride = pow4(depth), subquadrant_n_pixels = pow4(height - 1);
-         stride > 0;
-         stride /= 4, subquadrant_n_pixels *= 4) {
-        int write_offset = (stride - 1) / 3;
-        int read_offset = write_offset + stride;
-        Node *write_position = quadtree_nodes + write_offset;
-        Node *read_position = quadtree_nodes + read_offset;
-        for (int write_idx = 0, read_idx = 0; write_idx < stride; write_idx++, read_idx += 4) {
-            write_position[write_idx] = make_internal_node(
-                    read_position[read_idx + 0],
-                    read_position[read_idx + 1],
-                    read_position[read_idx + 2],
-                    read_position[read_idx + 3],
-                    subquadrant_n_pixels,
-                    detail_threshold);
+#pragma omp parallel num_threads(8)
+    {
+#ifndef NDEBUG
+        spdlog::debug("Thread {}", omp_get_thread_num());
+#endif
+        for (int stride = pow4(depth), subquadrant_n_pixels = pow4(height - 1);
+             stride > 0;
+             stride /= 4, subquadrant_n_pixels *= 4) {
+            int write_offset = (stride - 1) / 3;
+            int read_offset = write_offset + stride;
+            Node *write_position = quadtree_nodes + write_offset;
+            Node *read_position = quadtree_nodes + read_offset;
+#pragma omp for
+            for (int write_idx = 0; write_idx < stride; write_idx++) {
+                int read_idx = write_idx * 4;
+                write_position[write_idx] = make_internal_node(
+                        read_position[read_idx + 0],
+                        read_position[read_idx + 1],
+                        read_position[read_idx + 2],
+                        read_position[read_idx + 3],
+                        subquadrant_n_pixels,
+                        detail_threshold);
+            }
         }
     }
 }
