@@ -105,6 +105,7 @@ int main(int argc, char *argv[]) {
     dim3 blocks(n_pixels / threads.x);
     spdlog::info("Building the quadtreee on the device (blocks: {}, threads per block: {})...", blocks.x, threads.x);
     build_quadtree_device<<<blocks, threads>>>(d_color_soa, d_quadtree_nodes, tree_height, n_rows, n_cols, detail_threshold);
+    CHECK(cudaPeekAtLastError());
     CHECK(cudaDeviceSynchronize());
 
     spdlog::info("Copying the quadtree back to the host...");
