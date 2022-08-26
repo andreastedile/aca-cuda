@@ -85,6 +85,17 @@ int main(int argc, char *argv[]) {
         std::exit(EXIT_FAILURE);
     }
 
+    int dev = 0;
+    cudaSetDevice(dev);
+    cudaDeviceProp deviceProp;
+    cudaGetDeviceProperties(&deviceProp, dev);
+    printf("Device %d: \"%s\"\n", dev, deviceProp.name);
+    printf("Max number of threads per block: %d\n", deviceProp.maxThreadsPerBlock);
+    printf("Max dimension size of a grid size (x,y,z): (%d, %d, %d)\n",
+           deviceProp.maxGridSize[0],
+           deviceProp.maxGridSize[1],
+           deviceProp.maxGridSize[2]);
+
     spdlog::info("Flattening the image...");
     U8VectorSoa h_color_soa = flatten(pixels, n_pixels);
 
