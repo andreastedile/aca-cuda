@@ -130,7 +130,7 @@ __host__ void build_quadtree_host(Node *quadtree_nodes, int depth, int height, d
 * @param n_rows
 * @param n_cols
 */
-__global__ void build_quadtree_device(U8ArraySoa soa, Node *g_nodes, int tree_height, int n_rows, int n_cols, double detail_threshold) {
+__global__ void build_quadtree_device(U8ArraySoa soa, Node *g_nodes, int tree_height, double detail_threshold) {
     init_quadtree_leaves(soa, g_nodes, tree_height);
     __syncthreads();
 
