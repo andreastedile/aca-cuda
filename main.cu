@@ -9,13 +9,19 @@
 #include <cstdlib>
 #include <cuda_runtime.h>
 #include <iostream>
+#include <climits>
 #include <spdlog/spdlog.h>
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <stdexcept>
 #include <string>
+#include <unistd.h>
+
+char hostname[HOST_NAME_MAX];
 
 int main(int argc, char *argv[]) {
+    gethostname(hostname, HOST_NAME_MAX);
+
     argparse::ArgumentParser app("jqc");
     app.add_description("A JPEG compressor based on the quadtree algorithm");
 
@@ -115,7 +121,7 @@ int main(int argc, char *argv[]) {
     dim3 threads(n_threads_per_block);
     dim3 blocks(n_pixels / threads.x);
     spdlog::info("Building the quadtreee on the device (blocks: {}, threads per block: {})...", blocks.x, threads.x);
-    build_quadtree_device<<<blocks, threads>>>(d_color_soa, d_quadtree_nodes, tree_height, n_rows, n_cols, detail_threshold);
+    build_quadtree_device<<<blocks, threads>>>(d_color_soa, d_quadtree_nodes, tree_height, detail_threshold);
     CHECK(cudaPeekAtLastError());
     CHECK(cudaDeviceSynchronize());
 
